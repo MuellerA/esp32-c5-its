@@ -1,0 +1,12 @@
+
+
+esp32-c5-its-rx/.pio/
+esp32-c5-its-rx/CMakeLists.txt
+esp32-c5-its-rx/dependencies.lock
+esp32-c5-its-rx/managed_components/
+esp32-c5-its-rx/sdkconfig.esp32-c5-rx
+esp32-c5-its-rx/src/CMakeLists.txt
+
+esp32-c5-its-log/src/log-cvt
+
+local/
