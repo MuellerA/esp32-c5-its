@@ -1,4 +1,5 @@
 #include <string.h>
+#include <sys/time.h>
 #include <time.h>
 #include <math.h>
 #include "driver/uart.h"
@@ -12,7 +13,13 @@
 
 #include "esp32-c5-its.h"
 
-#define UART_PORT_NUM UART_NUM_1 // Nutze UART1
+static const char *TAG = "ESP32-C5-ITS gps";
+
+#define UART_PORT_NUM UART_NUM_1
+
+
+volatile bool gps_time_active ;
+volatile bool gps_pos_active ;
 
 
 #define GPS_BUF_SIZE 1024
@@ -26,8 +33,6 @@ void init_gps_uart() {
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
     };
     
-    // Installiert den Treiber und legt im Hintergrund automatisch 
-    // den hochoptimierten Interrupt und den RX-Ringbuffer (BUF_SIZE) an!
     uart_driver_install(UART_PORT_NUM, GPS_BUF_SIZE * 2, 0, 0, NULL, 0);
     uart_param_config(UART_PORT_NUM, &uart_config);
     uart_set_pin(UART_PORT_NUM, GPS_TX_GPIO, GPS_RX_GPIO, -1, -1);
@@ -55,6 +60,7 @@ static volatile int64_t offset_utc_to_sys_tick = 0 ;
 
 void calc_offset()
 {
+  static bool first = 1 ;
   struct tm t = {0};
 
   t.tm_year   = 2000 + (date_at_last_rmc % 100) - 1900;
@@ -68,6 +74,14 @@ void calc_offset()
 
   offset_utc_to_sys_tick = utc_us - sys_tick_at_last_pps ;
   gps_recv_time = 0 ;
+  gps_time_active = 1 ;
+
+  if (!first)
+    return ;
+
+  first = 0 ;
+  struct timeval now = { .tv_sec = utc_us / 1000000, .tv_usec = utc_us % 1000000 };
+  settimeofday(&now, NULL);
 }
 
 void gps_read_task(void *pvParameters)
@@ -79,7 +93,6 @@ void gps_read_task(void *pvParameters)
 
   while (1)
   {
-    // Lese byteweise vom UART-Treiber
     int len = uart_read_bytes(UART_PORT_NUM, &data, 1, pdMS_TO_TICKS(100));
     if (len > 0)
     {
@@ -118,6 +131,10 @@ void gps_read_task(void *pvParameters)
             gps_recv_time |= GPS_RECV_TIME_GGA ;
             if (gps_recv_time == GPS_RECV_TIME_ALL)
               calc_offset() ;
+          }
+          else
+          {
+            gps_time_active = 0 ;
           }
           
           gps_fix = 0 ;
@@ -165,6 +182,12 @@ void gps_read_task(void *pvParameters)
                 float alt = atof(line_buffer + comma[8] + 1) ;
                 gps_alt = (int32_t)(alt * 10);
               }
+
+              gps_pos_active = 1 ;
+            }
+            else
+            {
+              gps_pos_active = 0 ;
             }
           }
         }
@@ -172,7 +195,6 @@ void gps_read_task(void *pvParameters)
         {
           // Format: $GPRMC,time,status,lat,N,lon,E,spd,cog,date,mv,mvE,mode*cs
           //               0    1      2   3 4   5 6   7   8    9  A   B
-          // $GPRMC,203522.00,A,5109.0262308,N,11401.8407342,W,0.004,133.4,130522,0.0,E,D*2B
           // $GNRMC,204520.00,A,5109.0262239,N,11401.8407338,W,0.004,102.3,130522,0.0,E,D*3B
           size_t nComma = 0 ;
           size_t comma[20] ;
@@ -192,8 +214,12 @@ void gps_read_task(void *pvParameters)
             if (gps_recv_time == GPS_RECV_TIME_ALL)
               calc_offset() ;
           }
+          else
+          {
+            gps_time_active = 0 ;
+          }
         }
-        line_idx = 0; // Buffer zurücksetzen
+        line_idx = 0;
       }
       else if (line_idx < sizeof(line_buffer) - 1)
       {
@@ -216,7 +242,7 @@ int64_t sys_to_gps_time_us(int64_t sys_us)
 
 void gps_reporter_task(void *pvParameters)
 {
-  usb_data_t gps_msg;
+  log_data_t data;
 
   while (1)
   {
@@ -224,17 +250,16 @@ void gps_reporter_task(void *pvParameters)
 
     int64_t current_time = esp_timer_get_time();
 
-    gps_msg.pkt_type = PKT_TYPE_GPS;
-    gps_msg.timestamp_us = sys_to_gps_time_us(current_time);
-    gps_msg.length = 13 ;
+    data.type = LOG_DATA_TYPE_GPS;
+    data.timestamp_us = sys_to_gps_time_us(current_time);
+    data.size = 13 ;
 
-    // Umrechnung in Ganzzahlen (Beispiel: 7 Nachkommastellen Genauigkeit)
-    gps_msg.gps.quality = gps_fix ;
-    gps_msg.gps.latitude = gps_lat ;
-    gps_msg.gps.longitude = gps_lon ;
-    gps_msg.gps.altitude = gps_alt ;
+    data.gps.quality = gps_fix ;
+    data.gps.latitude = gps_lat ;
+    data.gps.longitude = gps_lon ;
+    data.gps.altitude = gps_alt ;
 
-    xQueueSend(usb_queue, &gps_msg, 0);
+    log_data(&data) ;
   }
 }
 
@@ -243,15 +268,14 @@ void init_gps()
   init_gps_uart();
 
   gpio_config_t io_conf = {
-      .intr_type = GPIO_INTR_POSEDGE,         // Trigger bei steigender Flanke (PPS Start)
-      .pin_bit_mask = (1ULL << GPS_PPS_GPIO), // Bit-Maske für den Pin
-      .mode = GPIO_MODE_INPUT,                // Als Eingang schalten
+      .intr_type = GPIO_INTR_POSEDGE,
+      .pin_bit_mask = (1ULL << GPS_PPS_GPIO),
+      .mode = GPIO_MODE_INPUT,
       .pull_up_en = GPIO_PULLUP_DISABLE,
-      .pull_down_en = GPIO_PULLDOWN_ENABLE // Meistens Pulldown für PPS nötig
+      .pull_down_en = GPIO_PULLDOWN_ENABLE
   };
   gpio_config(&io_conf);
 
-  // Handler an den Pin binden
   gpio_isr_handler_add(GPS_PPS_GPIO, gps_pps_isr_handler, NULL);
 
   xTaskCreate(gps_read_task, "gps_read_task", 4096, NULL, 5, NULL);

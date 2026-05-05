@@ -90,10 +90,11 @@ bool log_cvt(FILE *log, std::unique_ptr<Writer> &writer)
 void usage()
 {
   std::cout
-    << "usage: log-cvt [-p|-b] <log-file> ...\n"
+    << "usage: log-cvt [-p|-b] [-u] <log-file> ...\n"
     << "options:\n"
     << "  -p    pcapng file (default)\n"
-    << "  -b    vector blf file\n" ;
+    << "  -b    vector blf file\n"
+    << "  -u    source is usb log with magic bytes (default sd log w/o magic bytes)\n" ;
 }
 
 int main(int argc, char *argv[])
@@ -101,6 +102,7 @@ int main(int argc, char *argv[])
   int argi ;
   enum class Type { pcapng, blf } ;
   Type type{Type::pcapng} ;
+  int isUsbLog{0} ;
 
   for (argi = 1 ; argi < argc && argv[argi][0] == '-' ; ++argi)
   {
@@ -109,6 +111,8 @@ int main(int argc, char *argv[])
       type = Type::blf ;
     else if (arg == "-p")
       type = Type::pcapng ;
+    else if (arg == "-u")
+      isUsbLog = 1 ;
     else
     {
       usage() ;
@@ -152,7 +156,7 @@ int main(int argc, char *argv[])
 
     while (!feof(log))
     {
-      if (!skip_magic(log) ||
+      if ((isUsbLog && !skip_magic(log)) ||
           !log_cvt(log, writer))
         break ;
     }

@@ -1,26 +1,62 @@
 # ESP32-C5 ITS Logger
 
+<a href="esp32-c5-its.jpg"><img alt="esp32-c5-its" module src="esp32-c5-its.jpg" width="400px" align="right"/></a>
+
 Logger for Intelligent Transort Systems (ITS) G5 / IEEE 802.11p / V2X / Car2X messages at 5.9GHz.
 
-Inspired by the [OpenTrafficMap](https://opentrafficmap.org/) project to use an ESP32-C5 outside its specs to log ITS messages. While OpenTrafficMap focuses on stationary measurement points to record traffic on a map, this project's focus is recording while moving.
+Inspired by the [OpenTrafficMap](https://opentrafficmap.org/) project to use an ESP32-C5 outside its specs to log ITS messages. While OpenTrafficMap focuses on stationary measurement points to visualize traffic on a map, this project's focus is recording while moving.
 
-A mobile phone can be used for power supply and to record the data via USB. Logged are the raw messages, decoding has to be done with other tools e.g. Wireshark.
+A mobile phone can be used for power supply and to record the data via USB or with an SD card as mass storrage a power bank is sufficient for operation. Logged are the raw messages, decoding has to be done with other tools e.g. Wireshark or CANalyzer.Car2x.
 
-Transmitting at 5.9GHz is illigal in most countries. As ITS messages are for Safety and everybody should be safe, receiving and logging might be ok. Check yourself for your country and use it on your own risk.
+Transmitting at 5.9GHz is illigal in most countries. As ITS messages are safety related and everybody should be safe, receiving and logging might be ok. Check yourself for your country and use it on your own risk.
 
 ## ESP32-C5-ITS-RX
 
-ESP32C5 firmware. Captures ITS messages and logs them to the Serial/JTAG USB (CDC/ACM).
+ESP32-C5 firmware. Captures ITS messages and logs them to the Serial/JTAG USB (CDC/ACM) or an optional SD card.
 
-It's an PlatformIO project, compile and upload with PlatformIO. Unofficial functions are used to enable 802.11p communication, they might be removed from the espidf in later versions. 
+The development environment is PlatformIO, use it to compile and upload. To enable 802.11p communication unofficial espidf framework functions are used, they might be removed in later versions. 
 
-Optionally a GPS receiver can be connected for time and position.
+Logged are all received ITS messages and a timestamp/postion per second. If the optional GPS has a fix it's UTC time and position, else it's the ESP's system time.
 
-| ESP32C5 | GPS |
-|---------|-----|
-| GPIO 3  | PPS |
-| GPIO 4  | RX  |
-| GPIO 5  | TX  |
+### LED
+
+The LED shows dim continuous light to indicate timestamp/position status
+
+| mode         | continuous color |
+| ------------ | -----------------|
+| system time  | dim red          |
+| GPS time     | dim blue         |
+| GPS position | dim green        |
+
+The LED flashes bright for each received ITS message and timestamp/position update.
+
+| mode              | flash color  |
+| ----------------- | ------------ |
+| nothing connected | red          |
+| usb connected     | yellow       |
+| sdcard logging    | blue         |
+| usb & sdcard      | green        |
+
+### GPS (optional)
+
+A GPS receiver can be connected for UTC time and position. The GPS module must provide a PPS signal.
+
+| ESP32-C5 | GPS |
+|----------|-----|
+| GPIO 3   | PPS |
+| GPIO 4   | RX  |
+| GPIO 5   | TX  |
+
+### SD Card (optional)
+
+An SD card can be connected for logging data. Logging on SD card is started/stopped by pressing the ESP's boot button. The log filename is "log-timestamp.dat" with timestamp in seconds. Make sure to stop before switching off.
+
+| ESP32-C5 | SD card |
+|----------|---------|
+| GPIO2    | MISO    |
+| GPIO7    | MOSI    |
+| GPIO6    | CLK     |
+| GPIO10   | CS      |
 
 ## ESP32-C5-ITS-Log
 
@@ -35,25 +71,28 @@ usage: log-cvt [-p|-b] <log-file> ...
 options:
   -p    pcapng file (default)
   -b    vector blf file
+  -u    source is usb log with magic bytes (default sd log w/o magic bytes)
 ```
 
 ## Log File Format
 
 Format is still in development, compatibility may break at any time.
 
+Integer are stored little endian (ESP32 native).
+
 ```c
 struct
 {
-  uint32_t magic;        // 0xAA5555AA
+  uint32_t magic;        // 0xAA5555AA -- only on usb log, missing in sd card log
   uint8_t  pkt_type;     // 1 ITS / 2 GPS
-  uint64_t timestamp_us; // UTC time in µs
+  uint64_t timestamp_us; // UTC time in µs after GPS fix, else ESP system time in µs
   uint16_t length;       // length of follwing data (varibiable for ITS, 13 for GPS)
 
   union
   {
     struct
     {
-      uint8_t payload[length]; // its message
+      uint8_t payload[length];
     } its;
     struct
     {
