@@ -129,9 +129,9 @@ void usb_transmitter_task(void *)
   }
 }
 
-// wifi
+// its
 
-void rx_cb(void *buf, wifi_promiscuous_pkt_type_t type)
+void its_log_data(void *buf, wifi_promiscuous_pkt_type_t type)
 {
   static const uint8_t bc_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
@@ -208,7 +208,7 @@ void app_main()
       };
   esp_wifi_set_promiscuous_filter(&filter);
   esp_wifi_set_promiscuous(true);
-  esp_wifi_set_promiscuous_rx_cb(rx_cb);
+  esp_wifi_set_promiscuous_rx_cb(its_log_data);
 
   ESP_LOGI(TAG, "ready");
 }

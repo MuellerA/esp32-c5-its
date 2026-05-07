@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
@@ -16,6 +17,7 @@ static const char *TAG = "ESP32-C5-ITS sdcard";
 #define MOUNT_POINT "/sdcard"
 static sdmmc_card_t *card;
 static FILE *logFile ;
+static SemaphoreHandle_t logFileMutex;
 
 static TaskHandle_t sdcard_task_handle = NULL;
 volatile bool sdcard_active = false;
@@ -37,25 +39,29 @@ void sdcard_writer_task(void*)
   {
     if (xQueueReceive(sdcard_queue, &log_data, portMAX_DELAY))
     {
-      if (logFile)
+      if (xSemaphoreTake(logFileMutex, pdMS_TO_TICKS(500)) == pdTRUE)
       {
-        fwrite(&log_data.type, sizeof(uint8_t), 1, logFile) ;
-        fwrite(&log_data.timestamp_us, sizeof(int64_t), 1, logFile) ;
-        fwrite(&log_data.size, sizeof(uint16_t), 1, logFile) ;
-
-        switch (log_data.type)
+        if (logFile)
         {
-        case LOG_DATA_TYPE_ITS:
-          fwrite(log_data.its.payload, sizeof(uint8_t), log_data.size, logFile);
-          break ;
-        case LOG_DATA_TYPE_GPS:
-          fwrite(&log_data.gps.quality, sizeof(int8_t), 1, logFile);
-          fwrite(&log_data.gps.latitude, sizeof(int32_t), 1, logFile);
-          fwrite(&log_data.gps.longitude, sizeof(int32_t), 1, logFile);
-          fwrite(&log_data.gps.altitude, sizeof(int32_t), 1, logFile);         
-          break ;
+          fwrite(&log_data.type, sizeof(uint8_t), 1, logFile) ;
+          fwrite(&log_data.timestamp_us, sizeof(int64_t), 1, logFile) ;
+          fwrite(&log_data.size, sizeof(uint16_t), 1, logFile) ;
+
+          switch (log_data.type)
+          {
+          case LOG_DATA_TYPE_ITS:
+            fwrite(log_data.its.payload, sizeof(uint8_t), log_data.size, logFile);
+            break ;
+          case LOG_DATA_TYPE_GPS:
+            fwrite(&log_data.gps.quality, sizeof(int8_t), 1, logFile);
+            fwrite(&log_data.gps.latitude, sizeof(int32_t), 1, logFile);
+            fwrite(&log_data.gps.longitude, sizeof(int32_t), 1, logFile);
+            fwrite(&log_data.gps.altitude, sizeof(int32_t), 1, logFile);         
+            break ;
+          }
+          fflush(logFile) ;
         }
-        fflush(logFile) ;
+        xSemaphoreGive(logFileMutex) ;        
       }
     }
   }
@@ -115,10 +121,13 @@ void sdcard_control_task(void *pvParameters)
     }
     else
     {
-      fclose(logFile) ;
-      fsync(fileno(logFile)) ;
-      logFile = NULL ;
-      vTaskDelay(pdMS_TO_TICKS(100)) ;
+      if (xSemaphoreTake(logFileMutex, portMAX_DELAY) == pdTRUE)
+      {
+        fsync(fileno(logFile)) ;
+        fclose(logFile) ;
+        logFile = NULL ;
+        xSemaphoreGive(logFileMutex) ;
+      }
       unmount_sdcard() ;
     }
 
@@ -152,5 +161,7 @@ void init_sdcard()
   spi_bus_initialize(SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
 
   sdcard_queue = xQueueCreate(QUEUE_SIZE, sizeof(log_data_t));
-  xTaskCreate(sdcard_writer_task, "sdcard", 4096, NULL, 10, NULL);  
+  xTaskCreate(sdcard_writer_task, "sdcard", 4096, NULL, 10, NULL);
+
+  logFileMutex = xSemaphoreCreateMutex() ;
 }

@@ -20,7 +20,6 @@ bool read(FILE *log, t &v)
 {
   if (fread(&v, sizeof(t), 1, log) != 1)
   {
-    std::cerr << "read failed\n" ;
     return false ;
   }
   return true ;
@@ -31,7 +30,6 @@ bool read(FILE *log, size_t size, std::vector<uint8_t> &v)
   v.resize(size) ;
   if (fread(v.data(), sizeof(uint8_t), v.size(), log) != v.size())
   {
-    std::cerr << "read failed\n" ;
     return false ;
   }
   return true ;
@@ -49,7 +47,6 @@ bool skip_magic(FILE *log)
     if (magic == 0xaa5555aa)
       return true ;
   }
-  std::cerr << "magic failed\n" ;
   return false ;
 }
 

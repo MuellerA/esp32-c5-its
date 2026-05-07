@@ -240,27 +240,23 @@ int64_t sys_to_gps_time_us(int64_t sys_us)
   return sys_us + offset_utc_to_sys_tick ;
 }
 
-void gps_reporter_task(void *pvParameters)
+esp_timer_handle_t gps_log_data_timer;
+void gps_log_data(void *pvParameters)
 {
   log_data_t data;
 
-  while (1)
-  {
-    vTaskDelay(pdMS_TO_TICKS(1000));
+  int64_t current_time = esp_timer_get_time();
 
-    int64_t current_time = esp_timer_get_time();
+  data.type = LOG_DATA_TYPE_GPS;
+  data.timestamp_us = sys_to_gps_time_us(current_time);
+  data.size = 13 ;
 
-    data.type = LOG_DATA_TYPE_GPS;
-    data.timestamp_us = sys_to_gps_time_us(current_time);
-    data.size = 13 ;
+  data.gps.quality = gps_fix ;
+  data.gps.latitude = gps_lat ;
+  data.gps.longitude = gps_lon ;
+  data.gps.altitude = gps_alt ;
 
-    data.gps.quality = gps_fix ;
-    data.gps.latitude = gps_lat ;
-    data.gps.longitude = gps_lon ;
-    data.gps.altitude = gps_alt ;
-
-    log_data(&data) ;
-  }
+  log_data(&data) ;
 }
 
 void init_gps()
@@ -278,6 +274,12 @@ void init_gps()
 
   gpio_isr_handler_add(GPS_PPS_GPIO, gps_pps_isr_handler, NULL);
 
+  const esp_timer_create_args_t gps_log_data_timer_args = {
+      .callback = &gps_log_data,
+      .name = "mein_sekunden_timer"
+  };
+  esp_timer_create(&gps_log_data_timer_args, &gps_log_data_timer);
+  esp_timer_start_periodic(gps_log_data_timer, 1000000);
+
   xTaskCreate(gps_read_task, "gps_read_task", 4096, NULL, 5, NULL);
-  xTaskCreate(gps_reporter_task, "usb", 4096, NULL, 10, NULL);
 }
