@@ -6,5 +6,6 @@ esp32-c5-its-rx/managed_components/
 esp32-c5-its-rx/src/CMakeLists.txt
 
 esp32-c5-its-log/src/log-cvt
+esp32-c5-its-otm/esp32-c5-its-otm
 
 local/

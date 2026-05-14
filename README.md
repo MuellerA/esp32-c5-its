@@ -74,6 +74,32 @@ options:
   -u    source is usb log with magic bytes (default sd log w/o magic bytes)
 ```
 
+## ESP32-C5-ITS-OTM (Open Traffic Map)
+
+Connect the receiver to a Raspi and send captured messages to Open Traffic Map.
+
+Dependencies
+```txt
+apt install libmosquitto-dev libmosquittopp-dev libssl-dev
+```
+Compile
+```txt
+make
+```
+Usage
+```txt
+usage: esp32-c5-its-otm [option] ...
+options
+  -t|--tty <device>         tty device (default /dev/ttyACM0)
+  -mh|--mqtt-host <host>    mqtt host (default broker.emqx.io)
+  -mp|--mqtt-port <port>    mqtt port (default 8883)
+  -mi|--mqtt-id <id>        mqtt id (default esp32-c5-its)
+  -mt|--mqtt-topic <topic>  mqtt topic (default testtopic/esp32-c5-its/packet)
+  --tls                     tls
+  --tls-unsecure            tls but no verification
+  --tls-off                 no tls
+```
+
 ## Log File Format
 
 Format is still in development, compatibility may break at any time.
