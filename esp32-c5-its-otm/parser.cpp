@@ -73,7 +73,7 @@ bool Parser::start(QueueTty &queueTty, QueueIts &queueIts)
 
       std::cout << (uint32_t)type << " " << timeUs << " " << size << " " << data.size() << "\n" ;
 
-      if (type == 2)  // todo
+      if (type == 1)
         queueIts.push(std::move(data)) ;
     }
   }) ;

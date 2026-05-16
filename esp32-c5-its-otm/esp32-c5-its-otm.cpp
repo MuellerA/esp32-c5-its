@@ -12,7 +12,7 @@ void signal_handler(int signal)
 }
 
 #define MQTT_DEFAULT_ID "esp32-c5-its"
-#if 1
+#if 0
 Options options // test
 {
   "/dev/ttyACM0",
@@ -63,9 +63,9 @@ void usage()
     << "  -mp|--mqtt-port <port>    mqtt port (default " << options._mqttPort << ")\n"
     << "  -mi|--mqtt-id <id>        mqtt id (default " << options._mqttId << ")\n"
     << "  -mt|--mqtt-topic <topic>  mqtt topic (default " << options._mqttTopic << ")\n"
-    << "  --tls                     tls\n"
-    << "  --tls-unsecure            tls but no verification\n"
-    << "  --tls-off                 no tls\n"
+    << "  --tls                     tls" << ((options._tls == 1) ? " (default)\n" : "\n")
+    << "  --tls-unsecure            tls but no verification" << ((options._tls == 2) ? " (default)\n" : "\n")
+    << "  --tls-off                 no tls" << ((options._tls == 0) ? " (default)\n" : "\n")
     ;
 }
 
