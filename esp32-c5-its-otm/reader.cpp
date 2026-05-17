@@ -20,22 +20,10 @@ bool Reader::initPort()
 
   cfmakeraw(&tty);
   tty.c_cflag |= HUPCL ;
-  tty.c_cflag &= ~CRTSCTS;       
-  tty.c_cflag |= CREAD | CLOCAL; 
+  tty.c_cflag &= ~CRTSCTS;   
+  tty.c_cflag |= CREAD | CLOCAL;
   tty.c_cc[VMIN] = 0;
   tty.c_cc[VTIME] = 10;
-
-  //cfsetispeed(&tty, B9600);
-  //cfsetospeed(&tty, B9600);
-
-  //if (tcsetattr(_port, TCSANOW, &tty) != 0)
-  //{
-  //  std::cerr << "tcsetattr failed: " << strerror(errno) << std::endl;
-  //  close(_port);
-  //  return false;
-  //}
-
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));  
 
   cfsetispeed(&tty, B115200);
   cfsetospeed(&tty, B115200);
@@ -47,33 +35,27 @@ bool Reader::initPort()
     return false;
   }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));  
-
-  /*
   int flags;
   if (ioctl(_port, TIOCMGET, &flags) >= 0)
   {
     flags &= ~TIOCM_DTR;
-    flags &= ~TIOCM_RTS;
+    flags |= TIOCM_RTS;
     ioctl(_port, TIOCMSET, &flags);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));  
-
-    flags |= TIOCM_DTR;
-    flags &= ~TIOCM_RTS;
-    ioctl(_port, TIOCMSET, &flags); // Bits zurückschreiben
-
+ 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));  
 
     flags |= TIOCM_DTR;
     flags |= TIOCM_RTS;
-    ioctl(_port, TIOCMSET, &flags); // Bits zurückschreiben
+    ioctl(_port, TIOCMSET, &flags);
+ 
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));      
   }
   else
   {
     std::cout << "ioctl failed: " << strerror(errno) << std::endl ;
   }
-*/
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   if (tcflush(_port, TCIFLUSH) != 0)
   {

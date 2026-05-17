@@ -10,7 +10,7 @@ A mobile phone can be used as power supply and to record the data via USB. With 
 
 Logged are the raw messages, decoding has to be done with other tools e.g. Wireshark or CANalyzer.Car2x. [ESP32-C5-ITS-Log](#esp32-c5-its-log) can be used as log file converter for those tools. With the optional GPS module UTC time and the own position are recoreded as well.
 
-When connecting the receiver to a Raspi [ESP-C5-ITS-OTM](#esp32-c5-its-otm-open-traffic-map) can transmit the captured messages to Open Street Map.
+When connecting the ESP to a Linux machine [ESP-C5-ITS-OTM](#esp32-c5-its-otm-open-traffic-map) can transmit the captured messages to Open Street Map.
 
 Transmitting at 5.9GHz is illegal in most countries. As ITS messages are safety related and everybody should be safe, receiving and logging might be ok. Check yourself for your country and use it on your own risk.
 
@@ -86,8 +86,7 @@ options:
 
 ## ESP32-C5-ITS-OTM (Open Traffic Map)
 
-Linux Client for Open Traffic Map. Connect the receiver to a Raspi and send captured messages to Open Traffic Map.
-(Should work for all Linux systems, but could not reliably open /dev/ttyACM0 without running a monitor program first.)
+Linux Client for Open Traffic Map. Connect the ESP and send captured messages to Open Traffic Map.
 
 ### Dependencies
  - Mosquitto MQTT
