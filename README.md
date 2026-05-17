@@ -10,7 +10,7 @@ A mobile phone can be used as power supply and to record the data via USB. With 
 
 Logged are the raw messages, decoding has to be done with other tools e.g. Wireshark or CANalyzer.Car2x. [ESP32-C5-ITS-Log](#esp32-c5-its-log) can be used as log file converter for those tools. With the optional GPS module UTC time and the own position are recoreded as well.
 
-When connecting the receiver to a Raspi [ESP-C5-ITS-OTG](#esp32-c5-its-otm-open-traffic-map) can transmit the captured messages to Open Street Map.
+When connecting the receiver to a Raspi [ESP-C5-ITS-OTM](#esp32-c5-its-otm-open-traffic-map) can transmit the captured messages to Open Street Map.
 
 Transmitting at 5.9GHz is illegal in most countries. As ITS messages are safety related and everybody should be safe, receiving and logging might be ok. Check yourself for your country and use it on your own risk.
 
@@ -65,8 +65,8 @@ An SD card can be connected for logging data. Logging to SD card is started/stop
 ## ESP32-C5-ITS-Log
 
 Linux Converter for the recorded data, it converts to
-- PCAPNG: Generated file name is source name + ".pcapng" extension. Optional GPS data is added as a Beacon message with source address { 0xaa 0xaa 0xaa 0xaa 0xaa 0xaa }.
-- BLF: Generated file name is source name + ".blf" extension. Optional GPS data is added as GNSS system variable.
+- Wireshark PCAPNG: Generated file name is source name + ".pcapng" extension. Optional GPS data is added as a Beacon message with source address { 0xaa 0xaa 0xaa 0xaa 0xaa 0xaa }.
+- CANoe/CANalyzer BLF: Generated file name is source name + ".blf" extension. Optional GPS data is added as GNSS system variable.
 
 ### Dependencies
  - [fpcap](https://github.com/fpcap/fpcap)
@@ -77,7 +77,7 @@ Download and compile fpcap and vector_blf libraries. Update the library paths in
 
 ### Usage
 ```txt
-usage: log-cvt [-p|-b] <log-file> ...
+usage: log-cvt [-p|-b] [-u] <log-file> ...
 options:
   -p    pcapng file (default)
   -b    vector blf file
@@ -99,7 +99,7 @@ apt install libmosquitto-dev libmosquittopp-dev libssl-dev
 make
 ```
 ### Usage
-For a your individual OTA node id use option ```-mi```. The last 6 digits of the Linux machine id (/etc/machine-id) will be appended for uniqueness. If no ```-mt``` is given the topic path will be updated accordingly. E.g. ```-mi myNode``` will produce id ```myNode-ABCDEF``` and topic ```/its/myNode-ABCDEF/packet```.
+For a your individual OTM node id use option ```-mi```. The last 6 digits of the Linux machine id (/etc/machine-id) will be appended for uniqueness. If no ```-mt``` is given the topic path will be updated accordingly. E.g. ```-mi myNode``` will produce id ```myNode-ABCDEF``` and topic ```/its/myNode-ABCDEF/packet```.
 
 ```txt
 usage: esp32-c5-its-otm [option] ...
@@ -123,7 +123,7 @@ Integer are stored little endian (ESP32 native).
 ```c
 struct
 {
-  uint32_t magic;        // 0xAA5555AA -- only on usb log, missing in sd card log
+  uint32_t magic;        // 0xAA5555AA -- only in usb log, missing in sd card log
   uint8_t  pkt_type;     // 1 ITS / 2 GPS
   uint64_t timestamp_us; // UTC time in µs after GPS fix, else ESP system time in µs
   uint16_t length;       // length of follwing data (varibiable for ITS, 13 for GPS)
@@ -137,9 +137,9 @@ struct
     struct
     {
       uint8_t quality;
-      int32_t latitude;
-      int32_t longitude;
-      int32_t altitude;
+      int32_t latitude;   // °, * 10^7
+      int32_t longitude;  // °, * 10^7
+      int32_t altitude;   // m, * 10 
     } gps;
   };
 } 
