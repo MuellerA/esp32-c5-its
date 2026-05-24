@@ -13,7 +13,9 @@
 #include <condition_variable>
 #include <atomic>
 #include <mosquittopp.h>
-#include <openssl/ssl.h> 
+#include <openssl/ssl.h>
+
+#include "log-data.h"
 
 extern std::atomic<bool> shutdown ;
 

@@ -26,20 +26,21 @@ Logged are all received ITS messages and a timestamp/postion per second. If the 
 
 The LED shows dim continuous light to indicate timestamp/position status
 
-| mode         | continuous color |
-| ------------ | -----------------|
-| system time  | dim red          |
-| GPS time     | dim blue         |
-| GPS position | dim green        |
+| mode                | continuous color |
+| ------------------- | -----------------|
+| system time         | off              |
+| GPS time            | dim blue         |
+| GPS position        | dim red          |
+| GPS time & position | dim green        |
 
 The LED flashes bright for each received ITS message and timestamp/position update.
 
 | mode              | flash color  |
 | ----------------- | ------------ |
 | nothing connected | red          |
-| usb connected     | yellow       |
+| USB connected     | yellow       |
 | SD card logging   | blue         |
-| usb & SD card     | green        |
+| USB & SD card     | green        |
 
 ### GPS (optional)
 
@@ -79,7 +80,7 @@ Download and compile fpcap and vector_blf libraries. Update the library paths in
 ```txt
 usage: log-cvt [-p|-b] [-u] <log-file> ...
 options:
-  -p    pcapng file (default)
+  -p    pcapng file
   -b    vector blf file
   -u    source is usb log with magic bytes (default sd log w/o magic bytes)
 ```
@@ -115,31 +116,47 @@ options
 
 ## Log File Format
 
-Format is still in development, compatibility may break at any time.
-
 Integer are stored little endian (ESP32 native).
 
 ```c
+
 struct
 {
-  uint32_t magic;        // 0xAA5555AA -- only in usb log, missing in sd card log
-  uint8_t  pkt_type;     // 1 ITS / 2 GPS
-  uint64_t timestamp_us; // UTC time in µs after GPS fix, else ESP system time in µs
-  uint16_t length;       // length of follwing data (varibiable for ITS, 13 for GPS)
+  uint32_t magic;          // 0xAA5555AA -- only in usb log, missing in sd card log
+  struct
+  {
+    uint8_t  pkt_type;     // 0 Time / 1 ITS / 2 GPS / 254 Info / 255 Version
+    uint8_t  reserved;     // 0
+    uint16_t body_size;    // body size  (Time 0, ITS var, GPS 20, Version 4, Info var)
+    uint64_t timestamp_us; // UTC time in µs after GPS fix, else ESP system time in µs
+  } header ;
 
   union
   {
     struct
     {
-      uint8_t payload[length];
+      uint8_t payload[body_size];
     } its;
     struct
     {
-      uint8_t quality;
-      int32_t latitude;   // °, * 10^7
-      int32_t longitude;  // °, * 10^7
-      int32_t altitude;   // m, * 10 
+      int32_t  latitude;    // °, * 10^7
+      int32_t  longitude;   // °, * 10^7
+      int32_t  altitudeWGS; // m, * 10
+      int32_t  altitudeMSL; // m, * 10
+      uint16_t speed;       // m/s * 100
+      int16_t  heading;     // °, * 10
     } gps;
-  };
-} 
+    struct
+    {
+      uint8_t logVersion;   // 1
+      uint8_t prgVerMaj;
+      uint8_t prgVerMin;
+      uint8_t prgVerRev;
+    } version;
+    struct
+    {
+      char    text[body_size];
+    } info;
+  } body;
+}
 ```

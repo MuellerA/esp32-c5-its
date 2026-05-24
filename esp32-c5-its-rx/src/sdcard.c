@@ -33,7 +33,7 @@ QueueHandle_t sdcard_queue ;
 
 void sdcard_writer_task(void*)
 {
-  log_data_t log_data;
+  struct LogData log_data;
 
   while (1)
   {
@@ -43,25 +43,11 @@ void sdcard_writer_task(void*)
       {
         if (logFile)
         {
-          fwrite(&log_data.type, sizeof(uint8_t), 1, logFile) ;
-          fwrite(&log_data.timestamp_us, sizeof(int64_t), 1, logFile) ;
-          fwrite(&log_data.size, sizeof(uint16_t), 1, logFile) ;
-
-          switch (log_data.type)
-          {
-          case LOG_DATA_TYPE_ITS:
-            fwrite(log_data.its.payload, sizeof(uint8_t), log_data.size, logFile);
-            break ;
-          case LOG_DATA_TYPE_GPS:
-            fwrite(&log_data.gps.quality, sizeof(int8_t), 1, logFile);
-            fwrite(&log_data.gps.latitude, sizeof(int32_t), 1, logFile);
-            fwrite(&log_data.gps.longitude, sizeof(int32_t), 1, logFile);
-            fwrite(&log_data.gps.altitude, sizeof(int32_t), 1, logFile);         
-            break ;
-          }
+          fwrite(&log_data.header, sizeof(log_data.header), 1, logFile) ;
+          fwrite(&log_data.body, log_data.header.body_size, 1, logFile) ;
           fflush(logFile) ;
         }
-        xSemaphoreGive(logFileMutex) ;        
+        xSemaphoreGive(logFileMutex) ;
       }
     }
   }
@@ -87,7 +73,7 @@ esp_err_t mount_sdcard() {
 void unmount_sdcard()
 {
   esp_vfs_fat_sdcard_unmount(MOUNT_POINT, card);
-  card = NULL; 
+  card = NULL;
 }
 
 
@@ -97,26 +83,36 @@ void sdcard_control_task(void *pvParameters)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    sdcard_active = !sdcard_active;
-
-    if (sdcard_active)
+    if (!sdcard_active)
     {
       if (mount_sdcard() == ESP_OK)
       {
         char filename[64] ;
-        sprintf(filename, "%s/log-%lld.dat", MOUNT_POINT, sys_to_gps_time_us(esp_timer_get_time()) / 1000000) ;
-        logFile = fopen(filename, "wb");
+        if (xSemaphoreTake(logFileMutex, portMAX_DELAY) == pdTRUE)
+        {
+          sprintf(filename, "%s/log-%lld.dat", MOUNT_POINT, sys_to_gps_time_us(esp_timer_get_time()) / 1000000) ;
+          logFile = fopen(filename, "wb");
+          xSemaphoreGive(logFileMutex) ;
+        }
+
         if (!logFile)
         {
           ESP_LOGW(TAG, "fopen %s failed", filename);
-          sdcard_active = false ;
           unmount_sdcard() ;
         }
+
+        struct LogData data ;
+        init_version_log_data(&data) ;
+        xQueueSend(sdcard_queue, &data, 0) ;
+        init_info_log_data(&data) ;
+        xQueueSend(sdcard_queue, &data, 0) ;
+
+        ESP_LOGI(TAG, "sdcard logging start %s", filename) ;
+        sdcard_active = true ;
       }
       else
       {
         ESP_LOGW(TAG, "mount %s failed", MOUNT_POINT);
-        sdcard_active = false ;
       }
     }
     else
@@ -128,6 +124,8 @@ void sdcard_control_task(void *pvParameters)
         logFile = NULL ;
         xSemaphoreGive(logFileMutex) ;
       }
+      sdcard_active = false ;
+      ESP_LOGI(TAG, "sdcard logging stop") ;
       unmount_sdcard() ;
     }
 
@@ -138,16 +136,8 @@ void sdcard_control_task(void *pvParameters)
 
 void init_sdcard()
 {
-  gpio_config_t io_conf = {
-      .pin_bit_mask = (1ULL << SDCARD_BUTTON_GPIO),
-      .mode = GPIO_MODE_INPUT,
-      .pull_up_en = GPIO_PULLUP_ENABLE,
-      .intr_type = GPIO_INTR_NEGEDGE};
-  gpio_config(&io_conf);
+  xTaskCreate(sdcard_control_task, "sdcard_control", 0x1800, NULL, 10, &sdcard_task_handle);
 
-  xTaskCreate(sdcard_control_task, "log_ctrl", 4096, NULL, 10, &sdcard_task_handle);
-
-  gpio_install_isr_service(0);
   gpio_isr_handler_add(SDCARD_BUTTON_GPIO, button_isr_handler, NULL);
 
   spi_bus_config_t bus_cfg = {
@@ -160,7 +150,7 @@ void init_sdcard()
   };
   spi_bus_initialize(SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
 
-  sdcard_queue = xQueueCreate(QUEUE_SIZE, sizeof(log_data_t));
+  sdcard_queue = xQueueCreate(QUEUE_SIZE, sizeof(struct LogData));
   xTaskCreate(sdcard_writer_task, "sdcard", 4096, NULL, 10, NULL);
 
   logFileMutex = xSemaphoreCreateMutex() ;

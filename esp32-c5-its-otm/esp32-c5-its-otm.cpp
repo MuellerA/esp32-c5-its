@@ -44,7 +44,7 @@ std::string machineId()
     std::ifstream f(path) ;
     if (!f.is_open())
       continue ;
-    
+
     std::getline(f, mid) ;
     if (mid.size() > 6)
       mid = mid.erase(0, mid.size() - 6) ;

@@ -21,7 +21,7 @@ void BlfWriter::utcTimeToBlfTime(uint64_t utcTimeS, Vector::BLF::SYSTEMTIME &blf
   blfTime.hour = t->tm_hour;
   blfTime.minute = t->tm_min;
   blfTime.second = t->tm_sec;
-  blfTime.milliseconds = 0;  
+  blfTime.milliseconds = 0;
 }
 
 uint64_t BlfWriter::timeNs(uint64_t timeUs)
@@ -33,7 +33,7 @@ uint64_t BlfWriter::timeNs(uint64_t timeUs)
     _timeMeasurementStartUs = timeS * 1000000 ;
 
     utcTimeToBlfTime(timeS, _blf.fileStatistics.measurementStartTime) ;
-    
+
     _timeFirst = false ;
   }
 
@@ -93,13 +93,6 @@ bool BlfWriter::writeGps(uint64_t timeUs, const std::vector<uint8_t> &data)
 {
   const static std::string gnssSysVarName = "::GNSS::Ath1" ;
 #pragma pack(push, 1)
-  struct GpsLogData
-  {
-    uint8_t quality;
-    int32_t latitude;
-    int32_t longitude;
-    int32_t altitude;
-  } ;
   struct GnssSysVarData
   {
     double latitude ;
@@ -121,20 +114,23 @@ bool BlfWriter::writeGps(uint64_t timeUs, const std::vector<uint8_t> &data)
   GnssSysVarData gnssSysVarData ;
 #pragma pack(pop)
 
-  if (data.size() != sizeof(GpsLogData))
+  if (data.size() < sizeof(Gps))
     return false ;
-  
-  memset(&gnssSysVarData, 0, sizeof(gnssSysVarData)) ;
-  GpsLogData *gpsLogData = (GpsLogData*)data.data() ;
+  const Gps &gps = *(Gps*)data.data() ;
 
-  gnssSysVarData.latitude = (double)gpsLogData->latitude / 1e7 ;
-  gnssSysVarData.longitude = (double)gpsLogData->longitude / 1e7;
-  gnssSysVarData.altitude = (double)gpsLogData->altitude / 10;
-  gnssSysVarData.mode = gpsLogData->quality ? 3 : 0 ;
+  memset(&gnssSysVarData, 0, sizeof(gnssSysVarData)) ;
+
+  gnssSysVarData.latitude = (double)gps.latitude / 1e7 ;
+  gnssSysVarData.longitude = (double)gps.longitude / 1e7;
+  gnssSysVarData.altitude = (double)gps.altitudeMSL / 1e3;
+  gnssSysVarData.speed = (double)gps.speed / 1e2 ;
+  gnssSysVarData.direction = (double)gps.heading / 1e5 ;
+  gnssSysVarData.mode = 3 ;
   gnssSysVarData.status = 0 ;
   gnssSysVarData.satInView = 10 ;
   gnssSysVarData.satInUse = 10 ;
   gnssSysVarData.gnssTime = (double)timeUs / 1e6 ;
+  gnssSysVarData.geoAlt = (double)gps.altitudeWGS / 1e3 ;
 
   auto gnssSysVar = new Vector::BLF::SystemVariable ;
   gnssSysVar->objectTimeStamp = timeNs(timeUs) ;

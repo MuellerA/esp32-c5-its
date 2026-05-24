@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
+#include "esp_mac.h"
 #include "nvs_flash.h"
 #include "esp_event.h"
 #include "driver/usb_serial_jtag.h"
@@ -26,15 +30,16 @@ static void led_off_timer_cb(void *arg)
   uint8_t state = 0;
 
   if (gps_time_active)
-    state = 1 ;
+    state |= 1 ;
   if (gps_pos_active)
-    state = 2 ;
+    state |= 2 ;
 
   switch (state)
   {
-  case 1:  led_strip_set_pixel(led_strip, 0, 0, 0, 2); break; // green
-  case 2:  led_strip_set_pixel(led_strip, 0, 0, 2, 0); break; // blue
-  default: led_strip_set_pixel(led_strip, 0, 1, 0, 0); break; // red
+  case 1:  led_strip_set_pixel(led_strip, 0, 0, 0, 2); break; // time: blue
+  case 2:  led_strip_set_pixel(led_strip, 0, 0, 2, 0); break; // pos:  red
+  case 3:  led_strip_set_pixel(led_strip, 0, 0, 2, 0); break; // time&pos: green
+  default: led_strip_set_pixel(led_strip, 0, 0, 0, 0); break; // off
   }
   led_strip_refresh(led_strip);
 }
@@ -54,7 +59,7 @@ void led_flash(void *pvParameters)
 
     switch (state)
     {
-    case 1:  led_strip_set_pixel(led_strip, 0, 25, 50,  0); break; // usb yellow
+    case 1:  led_strip_set_pixel(led_strip, 0, 70, 25,  5); break; // usb orange/yellow
     case 2:  led_strip_set_pixel(led_strip, 0,  0,  0, 99); break; // sdcard blue
     case 3:  led_strip_set_pixel(led_strip, 0,  0, 99,  0); break; // usb & sdcard green
     default: led_strip_set_pixel(led_strip, 0, 50,  0,  0); break; // none red
@@ -92,7 +97,7 @@ QueueHandle_t usb_queue;
 
 void usb_transmitter_task(void *)
 {
-  log_data_t data;
+  struct LogData data;
   static const uint8_t magic[4] = {0xaa, 0x55, 0x55, 0xaa};
 
   usb_serial_jtag_driver_config_t usb_config = {
@@ -101,6 +106,11 @@ void usb_transmitter_task(void *)
   };
   usb_serial_jtag_driver_install(&usb_config);
 
+  init_version_log_data(&data) ;
+  xQueueSend(usb_queue, &data, 0) ;
+  init_info_log_data(&data) ;
+  xQueueSend(usb_queue, &data, 0) ;
+
   while (1)
   {
     if (xQueueReceive(usb_queue, &data, portMAX_DELAY))
@@ -108,22 +118,8 @@ void usb_transmitter_task(void *)
       if (usb_serial_jtag_is_connected())
       {
         usb_serial_jtag_write_bytes(magic, sizeof(magic), portMAX_DELAY);
-        usb_serial_jtag_write_bytes(&data.type, 1, portMAX_DELAY);
-        usb_serial_jtag_write_bytes(&data.timestamp_us, sizeof(int64_t), portMAX_DELAY);
-        usb_serial_jtag_write_bytes(&data.size, sizeof(uint16_t), portMAX_DELAY);
-
-        switch (data.type)
-        {
-        case LOG_DATA_TYPE_ITS:
-          usb_serial_jtag_write_bytes(data.its.payload, data.size, portMAX_DELAY);
-          break;
-        case LOG_DATA_TYPE_GPS:
-          usb_serial_jtag_write_bytes(&data.gps.quality, sizeof(int8_t), portMAX_DELAY);
-          usb_serial_jtag_write_bytes(&data.gps.latitude, sizeof(int32_t), portMAX_DELAY);
-          usb_serial_jtag_write_bytes(&data.gps.longitude, sizeof(int32_t), portMAX_DELAY);
-          usb_serial_jtag_write_bytes(&data.gps.altitude, sizeof(int32_t), portMAX_DELAY);
-          break;
-        }
+        usb_serial_jtag_write_bytes(&data.header, sizeof(data.header), portMAX_DELAY);
+        usb_serial_jtag_write_bytes(&data.body, data.header.body_size, portMAX_DELAY);
       }
     }
   }
@@ -143,23 +139,65 @@ void its_log_data(void *buf, wifi_promiscuous_pkt_type_t type)
   {
     if (pkt->rx_ctrl.sig_len <= MAX_PKT_SIZE)
     {
-      log_data_t data;
-      data.type = LOG_DATA_TYPE_ITS;
-      data.timestamp_us = sys_to_gps_time_us(current_time);
-      data.size = pkt->rx_ctrl.sig_len;
-      memcpy(data.its.payload, pkt->payload, data.size);
+      struct LogData data;
+      data.header.pkt_type = LOG_DATA_TYPE_ITS;
+      data.header.reserved = 0;
+      data.header.body_size = pkt->rx_ctrl.sig_len;
+      data.header.timestamp_us = sys_to_gps_time_us(current_time);
+      memcpy(data.body.its.payload, pkt->payload, data.header.body_size);
       log_data(&data) ;
     }
   }
 }
 
-void log_data(log_data_t *data)
+
+void init_version_log_data(struct LogData *data)
 {
-  if (usb_serial_jtag_is_connected && xQueueSend(usb_queue, data, 0) != pdTRUE)
+  int64_t current_time = esp_timer_get_time();
+
+  data->header.pkt_type = LOG_DATA_TYPE_VERSION;
+  data->header.reserved = 0;
+  data->header.body_size = sizeof(data->body.version) ;
+  data->header.timestamp_us = sys_to_gps_time_us(current_time) ;
+  data->body.version.logVersion = LOG_DATA_VERSION ;
+  data->body.version.prgVerMaj = PRG_VER_MAJ ;
+  data->body.version.prgVerMin = PRG_VER_MIN ;
+  data->body.version.prgVerRev = PRG_VER_REV ;
+}
+
+static char info_log_data_buff[500] ;
+static char *info_log_data_insert = info_log_data_buff ;
+void info_log_data(char *format, ...)
+{
+  va_list args;
+  va_start(args, format) ;
+
+  info_log_data_insert += vsnprintf(info_log_data_insert,
+                                    sizeof(info_log_data_buff) - (info_log_data_insert - info_log_data_buff),
+                                    format, args) ;
+}
+
+void init_info_log_data(struct LogData *data)
+{
+  int64_t current_time = esp_timer_get_time();
+
+  data->header.pkt_type = LOG_DATA_TYPE_INFO;
+  data->header.reserved = 0;
+  data->header.body_size = strlen(info_log_data_buff) ;
+  data->header.timestamp_us = sys_to_gps_time_us(current_time) ;
+  strcpy(data->body.info.text, info_log_data_buff) ;
+}
+
+void log_data(struct LogData *data)
+{
+  if (usb_serial_jtag_is_connected() &&
+      (xQueueSend(usb_queue, data, 0) != pdTRUE))
   {
     ESP_LOGW(TAG, "usb queue full");
   }
-  if (sdcard_active && xQueueSend(sdcard_queue, data, 0) != pdTRUE)
+  if (sdcard_active &&
+      (data->header.pkt_type != LOG_DATA_TYPE_TIME) &&
+      (xQueueSend(sdcard_queue, data, 0) != pdTRUE))
   {
     ESP_LOGW(TAG, "sdcard queue full");
   }
@@ -169,9 +207,57 @@ void log_data(log_data_t *data)
 extern void phy_change_channel(int, int, int, int);
 extern void phy_11p_set(int, int);
 
+
+void gpio_init()
+{
+  gpio_config_t io_conf_gps = {
+    .pin_bit_mask = (1ULL << GPS_PPS_GPIO),
+    .intr_type = GPIO_INTR_POSEDGE,
+    .mode = GPIO_MODE_INPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_ENABLE,
+  };
+  gpio_config(&io_conf_gps);
+
+  gpio_config_t io_conf_sdcard = {
+    .pin_bit_mask = (1ULL << SDCARD_BUTTON_GPIO),
+    .intr_type = GPIO_INTR_NEGEDGE,
+    .mode = GPIO_MODE_INPUT,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .pull_up_en = GPIO_PULLUP_ENABLE,
+  };
+  gpio_config(&io_conf_sdcard);
+
+  ESP_ERROR_CHECK(gpio_install_isr_service(0));
+}
+
 void app_main()
 {
-  gpio_install_isr_service(0);
+  {
+    info_log_data("esp32-c5-its version: %d.%d.%d\n", PRG_VER_MAJ, PRG_VER_MIN, PRG_VER_REV) ;
+    info_log_data("log file version: %d\n", LOG_DATA_VERSION) ;
+    info_log_data("git repo: %s\n", GIT_REPO) ;
+    {
+      esp_chip_info_t chip_info;
+      esp_chip_info(&chip_info) ;
+      info_log_data("esp model: %s\n", CONFIG_IDF_TARGET) ;
+      info_log_data("esp cores: %d\n", chip_info.cores) ;
+      info_log_data("esp chip rev: %d.%d\n", chip_info.revision / 100, chip_info.revision % 100);
+    }
+    {
+      uint32_t flash_size;
+      esp_flash_get_size(NULL, &flash_size) ;
+      info_log_data("esp flash: %lu MB\n", flash_size / (1024 * 1024));
+    }
+    {
+      uint8_t mac[6];
+      esp_read_mac(mac, ESP_MAC_BASE) ;
+      info_log_data("esp mac: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+    info_log_data("esp idf version: %s\n", esp_get_idf_version());
+  }
+
+  gpio_init() ;
 
   led_init();
 
@@ -185,7 +271,7 @@ void app_main()
 
   xTaskCreate(led_flash, "led_flash", 4096, NULL, 10, &led_flash_task);
 
-  usb_queue = xQueueCreate(QUEUE_SIZE, sizeof(log_data_t));
+  usb_queue = xQueueCreate(QUEUE_SIZE, sizeof(struct LogData));
   xTaskCreate(usb_transmitter_task, "usb", 4096, NULL, 10, NULL);
 
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();

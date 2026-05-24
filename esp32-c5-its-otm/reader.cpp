@@ -1,7 +1,5 @@
 #include "esp32-c5-its-otm.h"
 
-
-
 bool Reader::initPort()
 {
   _port = open(options._ttyName.c_str(), O_RDWR | O_NOCTTY);
@@ -20,7 +18,7 @@ bool Reader::initPort()
 
   cfmakeraw(&tty);
   tty.c_cflag |= HUPCL ;
-  tty.c_cflag &= ~CRTSCTS;   
+  tty.c_cflag &= ~CRTSCTS;
   tty.c_cflag |= CREAD | CLOCAL;
   tty.c_cc[VMIN] = 0;
   tty.c_cc[VTIME] = 10;
@@ -41,14 +39,14 @@ bool Reader::initPort()
     flags &= ~TIOCM_DTR;
     flags |= TIOCM_RTS;
     ioctl(_port, TIOCMSET, &flags);
- 
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));  
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     flags |= TIOCM_DTR;
     flags |= TIOCM_RTS;
     ioctl(_port, TIOCMSET, &flags);
- 
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));      
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
   else
   {

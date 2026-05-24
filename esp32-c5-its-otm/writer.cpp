@@ -1,4 +1,3 @@
-
 #include "esp32-c5-its-otm.h"
 
  Writer::Writer() : _mqtt(options._mqttId.c_str())
@@ -48,13 +47,13 @@ bool Writer::start(QueueIts &queueIts)
 
       int mid ;
       int rc = _mqtt.publish(
-        &mid, 
+        &mid,
         options._mqttTopic.c_str(),
-        static_cast<int>(data.size()), 
-        data.data(), 
-        1, 
+        static_cast<int>(data.size()),
+        data.data(),
+        1,
         false
-    );      
+    );
     }
   }) ;
 
@@ -67,7 +66,7 @@ void Writer::stop()
     _thread.join() ;
 
   _mqtt.disconnect() ;
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));  
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
   _mqtt.loop_stop(true) ;
   mosqpp::lib_cleanup() ;
 }

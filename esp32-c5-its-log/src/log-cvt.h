@@ -11,16 +11,28 @@
 #include <fpcap/pcapng/PcapNgWriter.hpp>
 #include <fpcap/filesystem/FileWriter.hpp>
 
+#include "log-data.h"
+
+struct ContentCount
+{
+  uint32_t time{0} ;
+  uint32_t its{0} ;
+  uint32_t gps{0} ;
+  uint32_t info{0} ;
+  uint32_t version{0} ;
+  uint32_t unknown{0} ;
+} ;
+
 class Writer
 {
 public:
   Writer() ;
   virtual ~Writer() ;
 
-  virtual bool open(const std::string &logName) = 0 ;
-  virtual bool close() = 0 ;
+  virtual bool open(const std::string &logName) ;
+  virtual bool close() ;
 
-  virtual bool writeIts(uint64_t timeUs, const std::vector<uint8_t> &data) = 0 ;
+  virtual bool writeIts(uint64_t timeUs, const std::vector<uint8_t> &data) ;
   virtual bool writeGps(uint64_t timeUs, const std::vector<uint8_t> &data) ;
 } ;
 
@@ -45,7 +57,7 @@ private:
 
   Vector::BLF::File _blf ;
   bool     _timeFirst ;
-  uint64_t _timeMeasurementStartUs ;  
+  uint64_t _timeMeasurementStartUs ;
 } ;
 
 class PcapWriter : public Writer

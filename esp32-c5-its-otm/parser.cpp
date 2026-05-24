@@ -48,35 +48,54 @@ bool Parser::start(QueueTty &queueTty, QueueIts &queueIts)
 {
   _thread = std::thread([this, &queueTty, &queueIts]()
   {
-    uint8_t type ;
-    uint64_t timeUs ;
-    uint16_t size ;
-    std::vector<uint8_t> data ;
-  
+    Header header ;
+    std::vector<uint8_t> body ;
+
     while (!shutdown)
     {
       if (!skip_magic(queueTty))
         return ;
 
-      if (!read(queueTty, type))
-        return ;
-      if (!read(queueTty, timeUs))
-        return ;
-      if (!read(queueTty, size))
+      if (!read(queueTty, header))
         return ;
 
-      if (size > 2000)
+      if (header.body_size > 2000)
         continue ;
-       
-      if (!read(queueTty, size, data))
+
+      if (!read(queueTty, header.body_size, body))
         return ;
 
-      std::cout << (uint32_t)type << " " << timeUs << " " << size << " " << data.size() << "\n" ;
+      std::cout << "\r\033[2K" << (uint32_t)header.pkt_type << " " << header.timestamp_us << " " << header.body_size ;
+      std::cout.flush() ;
 
-      if (type == 1)
-        queueIts.push(std::move(data)) ;
+      switch (header.pkt_type)
+      {
+      case LOG_DATA_TYPE_TIME:
+        break ;
+      case LOG_DATA_TYPE_ITS:
+        queueIts.push(std::move(body)) ;
+        break ;
+      case LOG_DATA_TYPE_GPS:
+        break ;
+      case LOG_DATA_TYPE_INFO:
+      std::cout
+        << "\nInfo:\n"
+        << std::string((char*)body.data(), body.size()) ;
+        break ;
+      case LOG_DATA_TYPE_VERSION:
+        {
+          if (body.size() < sizeof(Version))
+            break ;
+          const Version &version = *(Version*)body.data() ;
+          std::cout
+            << "\nVersion:\n"
+            << "Log: " << (int) version.logVersion << "\n"
+            << "Prg: " << (int) version.prgVerMaj << "." << (int) version.prgVerMin << "." << (int) version.prgVerRev << "\n" ;
+        }
+        break ;
+      }
     }
-  }) ;
+   }) ;
 
   return true ;
 }
