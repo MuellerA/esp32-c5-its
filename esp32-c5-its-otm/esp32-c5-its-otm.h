@@ -25,7 +25,8 @@ struct Options
   std::string _mqttHost ;
   uint32_t    _mqttPort ;
   std::string _mqttId ;
-  std::string _mqttTopic ;
+  std::string _mqttTopicPacket ;
+  std::string _mqttTopicStatus ;
   uint32_t    _tls ; // 0 no tls, 1 tls, 2 tls w/o vfy
 } ;
 extern Options options ;
@@ -37,6 +38,7 @@ public:
   bool push(T value) ;
   bool pop(T &value) ;
   bool empty() ;
+  void clear() ;
 
 private:
   std::queue<T> _queue;
@@ -76,6 +78,11 @@ bool Queue<T,Size>::empty() {
     std::lock_guard<std::mutex> lock(_mutex);
     return _queue.empty();
 }
+template<class T, size_t Size>
+void Queue<T,Size>::clear() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _queue = {} ;
+}
 
 using QueueTty = Queue<uint8_t, 2000> ;
 using QueueIts = Queue<std::vector<uint8_t>, 64> ;
@@ -83,11 +90,14 @@ using QueueIts = Queue<std::vector<uint8_t>, 64> ;
 class Reader
 {
 public:
-  bool start(QueueTty &queue) ;
+  Reader(QueueTty &queue) ;
+  bool start() ;
   void stop() ;
 
 private:
   bool initPort() ;
+
+  QueueTty &_queue ;
   std::thread _thread ;
   int _port ;
 } ;
@@ -95,21 +105,26 @@ private:
 class Parser
 {
 public:
-  bool start(QueueTty &queueTty, QueueIts &queueIts) ;
+  Parser(QueueTty &queueTty, QueueIts &queueIts) ;
+  bool start() ;
   void stop() ;
 
 private:
+  QueueTty &_queueTty ;
+  QueueIts &_queueIts ;
   std::thread _thread ;
 } ;
 
-class Writer
+class Writer : mosqpp::mosquittopp
 {
 public:
-  Writer() ;
-  bool start(QueueIts &queueIts) ;
+  Writer(QueueIts &queueIts) ;
+  bool start() ;
   void stop() ;
 
 private:
+  virtual void on_connect(int rc) override ;
+
+  QueueIts &_queueIts ;
   std::thread _thread ;
-  mosqpp::mosquittopp _mqtt ;
 } ;

@@ -43,26 +43,29 @@ bool skip_magic(QueueTty &queue)
   return false ;
 }
 
-
-bool Parser::start(QueueTty &queueTty, QueueIts &queueIts)
+Parser::Parser(QueueTty &queueTty, QueueIts &queueIts) : _queueTty(queueTty), _queueIts(queueIts)
 {
-  _thread = std::thread([this, &queueTty, &queueIts]()
+}
+
+bool Parser::start()
+{
+  _thread = std::thread([this]()
   {
     Header header ;
     std::vector<uint8_t> body ;
 
     while (!shutdown)
     {
-      if (!skip_magic(queueTty))
+      if (!skip_magic(_queueTty))
         return ;
 
-      if (!read(queueTty, header))
+      if (!read(_queueTty, header))
         return ;
 
       if (header.body_size > 2000)
         continue ;
 
-      if (!read(queueTty, header.body_size, body))
+      if (!read(_queueTty, header.body_size, body))
         return ;
 
       std::cout << "\r\033[2K" << (uint32_t)header.pkt_type << " " << header.timestamp_us << " " << header.body_size ;
@@ -73,7 +76,7 @@ bool Parser::start(QueueTty &queueTty, QueueIts &queueIts)
       case LOG_DATA_TYPE_TIME:
         break ;
       case LOG_DATA_TYPE_ITS:
-        queueIts.push(std::move(body)) ;
+        _queueIts.push(std::move(body)) ;
         break ;
       case LOG_DATA_TYPE_GPS:
         break ;

@@ -20,6 +20,7 @@ Options options // test
   8883,
   MQTT_DEFAULT_ID,
   "testtopic/" MQTT_DEFAULT_ID "/packet",
+  "",
   1
 } ;
 #else
@@ -30,6 +31,7 @@ Options options // real
   8883,
   MQTT_DEFAULT_ID,
   "its/" MQTT_DEFAULT_ID "/packet",
+  "",
   1
 } ;
 #endif
@@ -62,7 +64,7 @@ void usage()
     << "  -mh|--mqtt-host <host>    mqtt host (default " << options._mqttHost << ")\n"
     << "  -mp|--mqtt-port <port>    mqtt port (default " << options._mqttPort << ")\n"
     << "  -mi|--mqtt-id <id>        mqtt id (default " << options._mqttId << ")\n"
-    << "  -mt|--mqtt-topic <topic>  mqtt topic (default " << options._mqttTopic << ")\n"
+    << "  -mt|--mqtt-topic <topic>  mqtt topic (default " << options._mqttTopicPacket << ")\n"
     << "  --tls                     tls" << ((options._tls == 1) ? " (default)\n" : "\n")
     << "  --tls-unsecure            tls but no verification" << ((options._tls == 2) ? " (default)\n" : "\n")
     << "  --tls-off                 no tls" << ((options._tls == 0) ? " (default)\n" : "\n")
@@ -119,7 +121,7 @@ int main(int argc, char *argv[])
         usage() ;
         return 1 ;
       }
-      options._mqttTopic = argv[iArg] ;
+      options._mqttTopicPacket = argv[iArg] ;
     }
     else if (arg == "--tls")
     {
@@ -145,20 +147,27 @@ int main(int argc, char *argv[])
     options._mqttId += "-" + mid ;
   std::cout << "mid " << mid << " " << options._mqttId << "\n" ;
 
-  size_t pos = options._mqttTopic.find(MQTT_DEFAULT_ID) ;
+  size_t pos = options._mqttTopicPacket.find(MQTT_DEFAULT_ID) ;
   if (pos != std::string::npos)
-    options._mqttTopic.replace(pos, strlen(MQTT_DEFAULT_ID), options._mqttId) ;
+    options._mqttTopicPacket.replace(pos, strlen(MQTT_DEFAULT_ID), options._mqttId) ;
+
+  pos = options._mqttTopicPacket.find("/packet") ;
+  if (pos != std::string::npos)
+  {
+    options._mqttTopicStatus = options._mqttTopicPacket ;
+    options._mqttTopicStatus.replace(pos, strlen("/packet"), "/status") ;
+  }
 
   QueueTty queueTty ;
   QueueIts queueIts ;
 
-  Reader reader ;
-  Parser parser ;
-  Writer writer ;
+  Reader reader(queueTty) ;
+  Parser parser(queueTty, queueIts) ;
+  Writer writer(queueIts) ;
 
-  if (!reader.start(queueTty) ||
-      !parser.start(queueTty, queueIts) ||
-      !writer.start(queueIts))
+  if (!reader.start() ||
+      !parser.start() ||
+      !writer.start())
     shutdown = true ;
 
   reader.stop() ;

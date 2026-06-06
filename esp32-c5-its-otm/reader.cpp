@@ -1,5 +1,9 @@
 #include "esp32-c5-its-otm.h"
 
+Reader::Reader(QueueTty &queue) : _queue(queue)
+{
+}
+
 bool Reader::initPort()
 {
   _port = open(options._ttyName.c_str(), O_RDWR | O_NOCTTY);
@@ -63,12 +67,12 @@ bool Reader::initPort()
   return true ;
 }
 
-bool Reader::start(QueueTty &queue)
+bool Reader::start()
 {
   if (!initPort())
     return false ;
 
-  _thread = std::thread([this, &queue]()
+  _thread = std::thread([this]()
   {
     uint8_t buff[256];
     while (!shutdown)
@@ -81,7 +85,7 @@ bool Reader::start(QueueTty &queue)
       }
 
       for (ssize_t iBuff = 0; iBuff < nBuff; ++iBuff) {
-        queue.push(buff[iBuff]) ;
+        _queue.push(buff[iBuff]) ;
       }
     }
   }) ;
