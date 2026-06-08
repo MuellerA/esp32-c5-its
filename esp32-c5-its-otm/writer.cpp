@@ -61,8 +61,6 @@ void Writer::on_connect(int rc)
       if (!_queueIts.pop(data))
         continue ;
 
-      std::cout << data.size() << "\n" ;
-
       publish(nullptr, options._mqttTopicPacket.c_str(), static_cast<int>(data.size()), data.data(), 0, false);
     }
   }) ;
