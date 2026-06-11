@@ -50,7 +50,7 @@ template<class T, size_t Size>
 bool Queue<T,Size>::push(T value) {
   std::lock_guard<std::mutex> lock(_mutex);
   if (_queue.size() > Size)
-    return false;
+    _queue.pop();
   _queue.push(std::move(value));
   _cv.notify_one();
   return true ;
@@ -124,6 +124,7 @@ public:
 
 private:
   virtual void on_connect(int rc) override ;
+  virtual void on_disconnect(int rc) override ;
 
   QueueIts &_queueIts ;
   std::thread _thread ;

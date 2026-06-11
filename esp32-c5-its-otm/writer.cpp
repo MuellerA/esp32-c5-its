@@ -19,7 +19,6 @@ bool Writer::start()
 
   if (options._mqttTopicStatus.size())
   {
-    const std::string offline("offline") ;
     will_set(options._mqttTopicStatus.c_str(), static_cast<int>(statusOffline.size()), statusOffline.c_str(), 1, true) ;
   }
 
@@ -46,10 +45,18 @@ bool Writer::start()
   return true ;
 }
 
+std::atomic<bool> shutdownWriter ;
+
 void Writer::on_connect(int rc)
 {
   if (options._mqttTopicStatus.size())
     publish(nullptr, options._mqttTopicStatus.c_str(), static_cast<int>(statusOnline.size()), statusOnline.c_str(), 1, true) ;
+
+  if (_thread.joinable())
+  {
+    _thread.detach() ;
+  }
+  shutdownWriter = false;
 
   _thread = std::thread([this]()
   {
@@ -61,9 +68,18 @@ void Writer::on_connect(int rc)
       if (!_queueIts.pop(data))
         continue ;
 
+      if (shutdownWriter)
+        return ;
+
       publish(nullptr, options._mqttTopicPacket.c_str(), static_cast<int>(data.size()), data.data(), 0, false);
     }
   }) ;
+}
+
+void Writer::on_disconnect(int rc)
+{
+  shutdownWriter = true ;
+  _queueIts.push({}) ;
 }
 
 void Writer::stop()
