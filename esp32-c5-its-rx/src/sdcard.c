@@ -1,3 +1,5 @@
+#if defined(SDCARD)
+
 #include <stdio.h>
 #include <unistd.h>
 #include "freertos/FreeRTOS.h"
@@ -155,3 +157,5 @@ void init_sdcard()
 
   logFileMutex = xSemaphoreCreateMutex() ;
 }
+
+#endif

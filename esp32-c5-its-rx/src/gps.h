@@ -1,3 +1,7 @@
+#pragma once
+
+#if defined(GPS)
+
 extern volatile uint8_t gps_recv_time ;
 
 extern volatile struct Gps gps_data ;
@@ -10,3 +14,5 @@ extern void gps_nmea_read_task(void *pvParameters) ;
 
 extern bool gps_ubx_init() ;
 extern void gps_ubx_read_task(void *pvParameters) ;
+
+#endif

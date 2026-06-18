@@ -1,3 +1,5 @@
+#if defined(GPS)
+
 #include <sys/time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -533,3 +535,5 @@ bool gps_ubx_init()
 
   return true ;
 }
+
+#endif

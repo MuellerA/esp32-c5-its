@@ -1,3 +1,5 @@
+#if defined(GPS)
+
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
@@ -199,3 +201,4 @@ void gps_nmea_read_task(void *pvParameters)
   }
 }
 
+#endif

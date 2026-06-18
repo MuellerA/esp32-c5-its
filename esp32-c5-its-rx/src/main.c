@@ -22,6 +22,8 @@ static const char *TAG = "ESP32-C5-ITS main";
 
 // led
 
+#if defined(RGB)
+
 led_strip_handle_t led_strip;
 esp_timer_handle_t led_timer;
 
@@ -29,10 +31,12 @@ static void led_off_timer_cb(void *arg)
 {
   uint8_t state = 0;
 
+#if defined(GSP)
   if (gps_time_active)
     state |= 1 ;
   if (gps_pos_active)
     state |= 2 ;
+#endif
 
   switch (state)
   {
@@ -54,8 +58,10 @@ void led_flash(void *pvParameters)
 
     if (usb_serial_jtag_is_connected())
       state |= 1;
+#if defined(SDCARD)
     if (sdcard_active)
       state |= 2;
+#endif
 
     switch (state)
     {
@@ -90,6 +96,47 @@ static void led_init()
     };
   ESP_ERROR_CHECK(esp_timer_create(&timer_args, &led_timer));
 }
+
+#endif
+
+#if defined(LED)
+
+esp_timer_handle_t led_timer;
+
+static void led_off_timer_cb(void *arg)
+{
+  gpio_set_level(LED_GPIO, 1);
+}
+
+static TaskHandle_t led_flash_task = NULL;
+void led_flash(void *pvParameters)
+{
+  while (1)
+  {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    gpio_set_level(LED_GPIO, 0);
+
+    esp_timer_stop(led_timer);
+    esp_timer_start_once(led_timer, 50000); // us
+  }
+}
+
+static void led_init()
+{
+  gpio_reset_pin(LED_GPIO);
+  gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+
+  led_off_timer_cb(NULL);
+
+  const esp_timer_create_args_t timer_args = {
+      .callback = &led_off_timer_cb,
+      .name = "led_off"
+    };
+  ESP_ERROR_CHECK(esp_timer_create(&timer_args, &led_timer));
+}
+
+#endif
 
 // usb
 
@@ -150,7 +197,6 @@ void its_log_data(void *buf, wifi_promiscuous_pkt_type_t type)
   }
 }
 
-
 void init_version_log_data(struct LogData *data)
 {
   int64_t current_time = esp_timer_get_time();
@@ -165,7 +211,7 @@ void init_version_log_data(struct LogData *data)
   data->body.version.prgVerRev = PRG_VER_REV ;
 }
 
-static char info_log_data_buff[500] ;
+static char info_log_data_buff[1024] ;
 static char *info_log_data_insert = info_log_data_buff ;
 void info_log_data(char *format, ...)
 {
@@ -195,21 +241,27 @@ void log_data(struct LogData *data)
   {
     ESP_LOGW(TAG, "usb queue full");
   }
+
+#if defined(SDCARD)
   if (sdcard_active &&
       (data->header.pkt_type != LOG_DATA_TYPE_TIME) &&
       (xQueueSend(sdcard_queue, data, 0) != pdTRUE))
   {
     ESP_LOGW(TAG, "sdcard queue full");
   }
+#endif
+
+#if defined(RGB) || defined(LED)
   xTaskNotifyGive(led_flash_task) ;
+#endif
 }
 
 extern void phy_change_channel(int, int, int, int);
 extern void phy_11p_set(int, int);
 
-
 void gpio_init()
 {
+#if defined(GPS)
   gpio_config_t io_conf_gps = {
     .pin_bit_mask = (1ULL << GPS_PPS_GPIO),
     .intr_type = GPIO_INTR_POSEDGE,
@@ -218,7 +270,9 @@ void gpio_init()
     .pull_down_en = GPIO_PULLDOWN_ENABLE,
   };
   gpio_config(&io_conf_gps);
+#endif
 
+#if defined(SDCARD)
   gpio_config_t io_conf_sdcard = {
     .pin_bit_mask = (1ULL << SDCARD_BUTTON_GPIO),
     .intr_type = GPIO_INTR_NEGEDGE,
@@ -227,6 +281,7 @@ void gpio_init()
     .pull_up_en = GPIO_PULLUP_ENABLE,
   };
   gpio_config(&io_conf_sdcard);
+#endif
 
   ESP_ERROR_CHECK(gpio_install_isr_service(0));
 }
@@ -235,6 +290,20 @@ void app_main()
 {
   {
     info_log_data("esp32-c5-its version: %d.%d.%d\n", PRG_VER_MAJ, PRG_VER_MIN, PRG_VER_REV) ;
+    char options[1024] = {0} ;
+#if defined(GPS)
+    strcat(options, " GPS") ;
+#endif
+#if defined(SDCARD)
+    strcat(options, " SDCARD") ;
+#endif
+#if defined(RGB)
+    strcat(options, " RGB") ;
+#endif
+#if defined(LED)
+    strcat(options, " LED") ;
+#endif
+    info_log_data("esp32-c5-its options:%s\n", options) ;
     info_log_data("log file version: %d\n", LOG_DATA_VERSION) ;
     info_log_data("git repo: %s\n", GIT_REPO) ;
     {
@@ -255,21 +324,30 @@ void app_main()
       info_log_data("esp mac: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
     info_log_data("esp idf version: %s\n", esp_get_idf_version());
+
+    ESP_LOGI(TAG, "%s", info_log_data_buff);
   }
 
   gpio_init() ;
 
-  led_init();
-
   nvs_flash_init();
   esp_netif_init();
 
+#if defined(RGB) || defined(LED)
+  led_init();
+#endif
+
   init_gps();
+
+#if defined(SDCARD)
   init_sdcard();
+#endif
 
   esp_event_loop_create_default();
 
+#if defined(RGB) || defined(LED)
   xTaskCreate(led_flash, "led_flash", 4096, NULL, 10, &led_flash_task);
+#endif
 
   usb_queue = xQueueCreate(QUEUE_SIZE, sizeof(struct LogData));
   xTaskCreate(usb_transmitter_task, "usb", 4096, NULL, 10, NULL);

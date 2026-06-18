@@ -18,13 +18,23 @@ Transmitting at 5.9GHz is illegal in most countries. As ITS messages are safety 
 
 ESP32-C5 firmware. Captures ITS messages and logs them to the Serial/JTAG USB (CDC/ACM) or an optional SD card.
 
-The development environment is PlatformIO, use it to compile and upload. To enable 802.11p communication unofficial espidf framework functions are used, they might be removed in later versions of their IDE.
+The development environment is PlatformIO. Mandatory is only the ESP32-C5, optional components are listed below.
+ 1) Check/update the used GPIOs in ```src/esp32-c5-its.h```
+ 1) Select a envrionment matching your setup
+ 1) Compile
+ 1) Upload
+
+To enable 802.11p communication unofficial espidf framework functions are used, they might be removed in later versions from the IDE.
 
 Logged are all received ITS messages and a timestamp/postion per second. If the optional GPS has a fix it's UTC time and position, else it's the ESP's system time.
 
-### LED
+### LED (optional)
 
-The LED shows dim continuous light to indicate timestamp/position status
+The LED flashes for each received ITS message and timestamp/position update.
+
+### RGB LED (optional)
+
+The RGB LED shows dim continuous light to indicate timestamp/position status
 
 | mode                | continuous color |
 | ------------------- | -----------------|
@@ -33,7 +43,7 @@ The LED shows dim continuous light to indicate timestamp/position status
 | GPS position        | dim red          |
 | GPS time & position | dim green        |
 
-The LED flashes bright for each received ITS message and timestamp/position update.
+The RGB LED flashes bright for each received ITS message and timestamp/position update.
 
 | mode              | flash color  |
 | ----------------- | ------------ |
@@ -87,7 +97,7 @@ options:
 
 ## ESP32-C5-ITS-OTM (Open Traffic Map)
 
-Linux Client for Open Traffic Map. Connect the ESP and send captured messages to Open Traffic Map.
+Linux client for Open Traffic Map. Connect the ESP and send captured messages to Open Traffic Map.
 
 ### Dependencies
  - Mosquitto MQTT
