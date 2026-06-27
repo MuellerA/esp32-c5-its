@@ -290,7 +290,7 @@ void app_main()
 {
   {
     info_log_data("esp32-c5-its version: %d.%d.%d\n", PRG_VER_MAJ, PRG_VER_MIN, PRG_VER_REV) ;
-    char options[1024] = {0} ;
+    char options[80] = {0} ;
 #if defined(GPS)
     strcat(options, " GPS") ;
 #endif
